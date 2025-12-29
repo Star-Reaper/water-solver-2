@@ -169,7 +169,7 @@ def simulate_move_on_board(board, src_idx, dst_idx, tracked_top_color=None):
     for v in dst:
         if v != "BC":
             dst_top = v
-        break
+            break
     if dst_top is not None and dst_top not in ("?", color):
         return None
 
@@ -846,9 +846,19 @@ def can_pour(from_b, to_b, from_idx, to_idx):
     """Check if we can pour from_b into to_b, using logical tracking"""
     global bottle_contents
     
-    # Can't pour from empty or if top is unknown
-    if not from_b or '?' in from_b[0:1]:
+    # Can't pour from empty
+    if not from_b:
         return False
+
+    # Determine pour color (unknown tops are allowed if tracked)
+    from_bottle_num = from_idx + 1
+    top = from_b[0]
+    if top == '?':
+        if from_bottle_num not in bottle_contents:
+            return False
+        color_to_pour = bottle_contents[from_bottle_num]
+    else:
+        color_to_pour = top
     
     # Don't pour from completed bottles
     if is_uniform_full(from_b) or is_almost_full_same(from_b):
@@ -857,9 +867,6 @@ def can_pour(from_b, to_b, from_idx, to_idx):
     # Can't pour if destination is full
     if len(to_b) >= MAX_HEIGHT:
         return False
-    
-    # Get the color we're trying to pour
-    color_to_pour = from_b[0]
     
     # Check if destination bottle has a tracked color
     to_bottle_num = to_idx + 1
@@ -876,7 +883,7 @@ def can_pour(from_b, to_b, from_idx, to_idx):
         return False
     
     # Can only pour if colors match
-    return from_b[0] == to_b[0]
+    return color_to_pour == to_b[0]
 
 def do_pour(board, i, j):
     """Pour from bottle i to bottle j"""
@@ -886,7 +893,14 @@ def do_pour(board, i, j):
     tb = board[j]
     if not can_pour(fb, tb, i, j):
         return 0
-    color = fb[0]
+    # Determine pour color, allowing tracked unknown tops
+    from_bottle_num = i + 1
+    if fb[0] == '?':
+        color = bottle_contents.get(from_bottle_num)
+    else:
+        color = fb[0]
+    if not color:
+        return 0
     
     # Track what color goes into destination
     to_bottle_num = j + 1
@@ -895,8 +909,9 @@ def do_pour(board, i, j):
         print(f"      Tracking: Bottle {to_bottle_num} now contains {color}")
     
     moved = 0
-    while fb and fb[0] == color and len(tb) < MAX_HEIGHT:
-        tb.insert(0, fb.pop(0))
+    while fb and (fb[0] == color or fb[0] == '?') and len(tb) < MAX_HEIGHT:
+        fb.pop(0)  # remove from source (unknowns become the tracked color)
+        tb.insert(0, color)
         moved += 1
     
     # If source is now empty, clear its tracking
